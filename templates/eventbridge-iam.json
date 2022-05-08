@@ -1,0 +1,154 @@
+{
+    "Outputs": {
+        "EventBridgeMLPipelineTriggerRole": {
+            "Description": "EventBridgeMLPipelineTriggerRole",
+            "Value": {
+                "Fn::GetAtt": ["EventBridgeMLPipelineTriggerRole", "Arn"]
+            }
+        },
+        "EventBridgeMLPipelineTriggerRule": {
+            "Description": "EventBridgeMLPipelineTriggerRule",
+            "Value": {
+                "Ref": "EventBridgeMLPipelineTriggerRule"
+            }
+        }
+    },
+    "Parameters": {
+        "SageMakerMLPipelineName": {
+            "Default": "",
+            "Description": "SageMakerMLPipelineName",
+            "Type": "String"
+        },
+        "SageMakerS3Bucket": {
+            "Default": "",
+            "Description": "Sagemaker S3 bucket name",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "EventBridgeMLPipelineTriggerRule": {
+            "Type": "AWS::Events::Rule",
+            "Properties": {
+               "Description": "Rule to trigger ML pipeline based on s3 put",
+               "EventBusName": "default",
+               "State": "ENABLED",
+               "EventPattern": {
+                "source": ["aws.s3"],
+                "detail-type": ["Object Created"],
+                "detail": {
+                  "bucket": {
+                    "name": [{"Ref": "SageMakerS3Bucket"}]
+                  },
+                  "object": {
+                    "key": [{
+                      "prefix": "input/"
+                    }]
+                  }
+                }
+              },
+               "Targets": [
+                  {
+                      "Arn": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "arn:aws:sagemaker:",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                ":",
+                                {
+                                    "Ref": "AWS::AccountId"
+                                },
+                                ":pipeline/",
+                                {
+                                    "Ref": "SageMakerMLPipelineName"
+                                }
+                            ]
+                        ]
+                      },
+                      "Id": "MLOpsPipelineTriggerTarget",
+                      "RoleArn": {
+                         "Fn::GetAtt": [
+                            "EventBridgeMLPipelineTriggerRole",
+                            "Arn"
+                         ]
+                      },
+                      "SageMakerPipelineParameters": {
+                         "PipelineParameterList" : [ 
+                            {
+                                "Name" : "InputModelEvent",
+                                "Value" : "$.detail.object.key"
+                            }
+                         ]
+                      }
+                  }
+              ]
+         }
+      },
+        "EventBridgeMLPipelineTriggerRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "sts:AssumeRole",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "events.amazonaws.com"
+                            }
+                        }
+                    ]
+                },
+                "Policies": [
+                    {
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "sagemaker:StartPipelineExecution"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:aws:sagemaker:",
+                                                    {
+                                                        "Ref": "AWS::Region"
+                                                    },
+                                                    ":",
+                                                    {
+                                                        "Ref": "AWS::AccountId"
+                                                    },
+                                                    ":pipeline/",
+                                                    {
+                                                        "Ref": "SageMakerMLPipelineName"
+                                                    }
+                                                ]
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        "PolicyName": "SageMakerMLOpsPipelineTrigger"
+                    }
+                ],
+                "RoleName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "EventBridgeMLPipelineTriggerRole",
+                            {
+                                "Ref": "AWS::Region"
+                            }
+                        ]
+                    ]
+                }
+            },
+            "Type": "AWS::IAM::Role"
+        }
+    }
+}
